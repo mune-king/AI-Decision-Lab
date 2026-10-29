@@ -1,0 +1,64 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>vdtNext ZIP提出</title>
+<style>:root{font-family:system-ui,-apple-system,'Hiragino Kaku Gothic ProN',sans-serif;background:#f3f6fa;color:#1b2b3b}*{box-sizing:border-box}body{margin:0}main{max-width:720px;margin:24px auto;padding:25px;background:#fff;border:1px solid #dce5ec;border-radius:16px}h1{margin:0;font-size:1.6rem}h2{font-size:1.15rem;margin-top:26px}p{line-height:1.65}label,.label{display:block;font-weight:700;margin:16px 0 6px}input,select{width:100%;font:inherit;font-size:16px;padding:11px;border:1px solid #aab8c3;border-radius:9px;background:#fff}.radio label{font-weight:400;display:flex;gap:8px;align-items:flex-start;margin:7px 0}.radio input{width:auto;margin-top:5px}button{width:100%;font:inherit;font-size:18px;padding:14px;margin-top:22px;border:0;border-radius:11px;background:#176c91;color:#fff}button:disabled{background:#8aa3b1}.muted{color:#596a77;font-size:.92rem}.notice{background:#fff8e3;border:1px solid #ecd28a;padding:11px 14px;border-radius:10px}.panel{background:#eef5fa;padding:12px 14px;border-radius:10px}.err{color:#b3261e;font-weight:700;min-height:1.4em}.ok{background:#e7f6ec;border:1px solid #8cc9a0;padding:16px;border-radius:12px}.receipt{font-size:2rem;font-weight:800;letter-spacing:.08em}progress{width:100%;height:18px;margin-top:12px}@media(max-width:640px){main{margin:0;border-radius:0;padding:18px}}</style></head><body><main>
+<h1>vdtNext ZIP提出</h1><p class="muted">集中講義 — VDT計測データ提出フォーム</p>
+<p class="notice">計測アプリが作成したZIPファイル（約10MB）を<strong>1回だけ</strong>提出します。GitHubなどの操作やアカウント登録は不要です。提出したファイルは非公開の領域に保存され、他の学生からは見えません。</p>
+<form id="form" novalidate>
+<h2>1. 授業の提出確認</h2>
+<label for="studentNumber">学籍番号</label><input id="studentNumber" autocomplete="off" inputmode="latin" maxlength="20" placeholder="例：A123456">
+<p class="muted">授業での提出確認だけに使います。研究用データとは別の表に保存します。</p>
+<h2>2. 計測情報</h2>
+<label for="researchId">研究用ID</label><input id="researchId" autocomplete="off" maxlength="32" placeholder="配布された研究用ID（例：V001）">
+<p class="muted">学籍番号・氏名は入力しないでください。</p>
+<label for="age">満年齢</label><input id="age" type="number" inputmode="numeric" min="15" max="99" step="1" placeholder="例：20">
+<label for="measuredOn">計測日</label><input id="measuredOn" type="date">
+<span class="label" id="orderLabel">文字サイズの実施順序</span><div class="radio" id="fontOrder" role="radiogroup" aria-labelledby="orderLabel"></div>
+<h2>3. ZIPファイル</h2>
+<label for="zipFile">提出するZIPファイル</label><input id="zipFile" type="file" accept=".zip,application/zip,application/x-zip-compressed">
+<p class="muted" id="fileInfo">ZIPファイルを選択してください（30MBまで）。ZIPを解凍・編集せずにそのまま選んでください。</p>
+<h2>4. 研究利用への同意（授業の提出とは別です）</h2>
+<p class="panel">ZIPの提出は授業の課題です。研究利用に<strong>同意するかどうかは自由</strong>で、同意しなくても提出は受け付けられ、成績には一切影響しません。研究の目的・保管期間・同意撤回の方法は、別に配布する説明文書で確認してください。</p>
+<div class="radio" role="radiogroup" aria-label="研究利用への同意">
+<label><input type="radio" name="consent" value="agree"> 説明文書を読み、このデータを研究に使うことに同意します</label>
+<label><input type="radio" name="consent" value="disagree"> 同意しません（授業の提出としてのみ扱う）</label></div>
+<p class="err" id="err" role="alert"></p>
+<button id="submitBtn" type="submit">提出する</button><progress id="progress" max="100" value="0" hidden></progress><p class="muted" id="status" role="status" aria-live="polite"></p>
+</form>
+<section id="done" hidden><div class="ok"><h2 style="margin-top:0">提出が完了しました</h2><p>受付番号</p><div class="receipt" id="receipt"></div><p id="doneDetail"></p><p class="muted">この画面を撮影するか、受付番号を控えてください。提出をやり直す必要はありません。</p></div></section>
+</main><script>
+'use strict';
+const API='https://plirzczxdhddfcxldnxj.supabase.co',KEY='sb_publishable_NCH7QuER6v_83QHr8RvVkA_9U2oprUz',BUCKET='vdtnext-pilot',MAX_BYTES=30*1024*1024;
+const ORDERS=['12-10.5-9','12-9-10.5','10.5-12-9','10.5-9-12','9-12-10.5','9-10.5-12'];
+const $=id=>document.getElementById(id);
+$('fontOrder').innerHTML=ORDERS.map((o,i)=>'<label><input type="radio" name="fontOrder" value="'+o+'"> 順序'+(i+1)+'：'+o.split('-').map(v=>v+'pt').join(' → ')+'</label>').join('');
+$('measuredOn').value=new Date().toLocaleDateString('sv-SE');
+let pending=null,busy=false;// pending keeps the upload id so a retry never creates a second copy
+const checked=name=>{const x=document.querySelector('input[name="'+name+'"]:checked');return x?x.value:''};
+function readForm(){
+ const v={studentNumber:$('studentNumber').value.trim().toUpperCase(),researchId:$('researchId').value.trim(),age:$('age').value.trim(),measuredOn:$('measuredOn').value,fontOrder:checked('fontOrder'),consent:checked('consent'),file:$('zipFile').files[0]};
+ if(!/^[A-Za-z0-9-]{4,20}$/.test(v.studentNumber))return {error:'学籍番号を半角英数字で入力してください。'};
+ if(!/^[A-Za-z0-9_-]{1,32}$/.test(v.researchId))return {error:'研究用IDを半角英数字（- _ も可）で入力してください。'};
+ if(v.researchId.toUpperCase()===v.studentNumber)return {error:'研究用IDに学籍番号は使えません。配布された研究用IDを入力してください。'};
+ if(!/^\d{1,2}$/.test(v.age)||+v.age<15||+v.age>99)return {error:'満年齢を15〜99の整数で入力してください。'};
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(v.measuredOn)||v.measuredOn<'2026-01-01'||v.measuredOn>new Date(Date.now()+864e5).toLocaleDateString('sv-SE'))return {error:'計測日を正しく入力してください。'};
+ if(!ORDERS.includes(v.fontOrder))return {error:'文字サイズの実施順序を選んでください。'};
+ if(!v.file)return {error:'ZIPファイルを選んでください。'};
+ if(!/\.zip$/i.test(v.file.name))return {error:'拡張子が .zip のファイルを選んでください。'};
+ if(v.file.size<22||v.file.size>MAX_BYTES)return {error:'ファイルサイズが範囲外です（30MBまで）。'};
+ if(!['agree','disagree'].includes(v.consent))return {error:'研究利用への同意について、どちらかを選んでください。'};
+ v.age=+v.age;return v}
+async function inspect(file){const buf=await file.arrayBuffer(),b=new Uint8Array(buf,0,4);if(!(b[0]===0x50&&b[1]===0x4b&&(b[2]===3&&b[3]===4||b[2]===5&&b[3]===6)))throw Error('notzip');const h=new Uint8Array(await crypto.subtle.digest('SHA-256',buf));return Array.from(h,x=>x.toString(16).padStart(2,'0')).join('')}
+function upload(id,file){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',API+'/storage/v1/object/'+BUCKET+'/submissions/'+id+'.zip');x.setRequestHeader('apikey',KEY);x.setRequestHeader('Content-Type','application/zip');x.setRequestHeader('x-upsert','false');x.timeout=600000;
+ x.upload.onprogress=e=>{if(e.lengthComputable){$('progress').value=Math.round(e.loaded/e.total*100);$('status').textContent='送信中… '+Math.round(e.loaded/e.total*100)+'%'}};
+ // 409/400 Duplicate means an earlier attempt with the same id already reached Storage.
+ x.onload=()=>x.status<300||/Duplicate|already exists/i.test(x.responseText)?resolve():reject(Error('upload '+x.status+' '+x.responseText.slice(0,200)));x.onerror=()=>reject(Error('network'));x.ontimeout=()=>reject(Error('timeout'));x.send(file)})}
+async function register(id,v,sha){const r=await fetch(API+'/rest/v1/rpc/vdtnext_register_upload',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_id:id,p_research_id:v.researchId,p_age:v.age,p_measured_on:v.measuredOn,p_font_order:v.fontOrder,p_research_consent:v.consent,p_sha256:sha,p_student_number:v.studentNumber})});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error('register '+r.status+' '+(j.message||''));return j}
+$('form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;$('err').textContent='';const v=readForm();if(v.error){$('err').textContent=v.error;return}
+ busy=true;$('submitBtn').disabled=true;$('progress').hidden=false;$('progress').value=0;$('status').textContent='ファイルを確認しています…';
+ try{let sha;try{sha=await inspect(v.file)}catch(x){throw Error('notzip')}
+  const key=[v.file.name,v.file.size,v.file.lastModified,sha].join('|');if(!pending||pending.key!==key)pending={key,id:crypto.randomUUID(),uploaded:false};
+  if(!pending.uploaded){await upload(pending.id,v.file);pending.uploaded=true}
+  $('progress').value=100;$('status').textContent='保存を確認しています…';const res=await register(pending.id,v,sha);
+  $('form').hidden=true;$('done').hidden=false;$('receipt').textContent=res.receipt;$('doneDetail').textContent='保存を確認したサイズ：'+(res.stored_bytes/1048576).toFixed(1)+'MB（'+Number(res.stored_bytes).toLocaleString('ja-JP')+' バイト）';pending=null;window.scrollTo(0,0)
+ }catch(x){const m=String(x.message||x);$('err').textContent=m==='notzip'?'ZIPファイルとして読み取れません。計測アプリが作成したZIPをそのまま選んでください。':/^upload 413|maximum allowed size/i.test(m)?'ファイルが大きすぎます。':'送信できませんでした。電波の良い場所で、もう一度「提出する」を押してください（二重提出にはなりません）。';$('status').textContent='詳細：'+m.slice(0,160)}
+ finally{busy=false;$('submitBtn').disabled=false}});
+</script></body></html>
