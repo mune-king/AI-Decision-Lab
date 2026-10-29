@@ -50,7 +50,7 @@ async function inspect(file){const buf=await file.arrayBuffer(),b=new Uint8Array
 function upload(id,file){return new Promise((resolve,reject)=>{const x=new XMLHttpRequest();x.open('POST',API+'/storage/v1/object/'+BUCKET+'/submissions/'+id+(file.name.toLowerCase().endsWith('.csv')?'.csv':'.zip'));x.setRequestHeader('apikey',KEY);x.setRequestHeader('Content-Type',file.name.toLowerCase().endsWith('.csv')?'text/csv':'application/zip');x.setRequestHeader('x-upsert','false');x.timeout=600000;
  x.upload.onprogress=e=>{if(e.lengthComputable){$('progress').value=Math.round(e.loaded/e.total*100);$('status').textContent='送信中… '+Math.round(e.loaded/e.total*100)+'%'}};
  // 409/400 Duplicate means an earlier attempt with the same id already reached Storage.
- x.onload=()=>x.status<300||/Duplicate|already exists/i.test(x.responseText)?resolve():reject(Error('upload '+x.status+' '+x.responseText.slice(0,200)));x.onerror=()=>reject(Error('network'));x.ontimeout=()=>reject(Error('timeout'));x.send(file)})}
+ x.onload=()=>x.status<300||/Duplicate|already exists/i.test(x.responseText)?resolve():reject(Error('upload '+x.status+' '+x.responseText.slice(0,200)));x.onerror=()=>reject(Error('network: 接続に失敗しました'));x.ontimeout=()=>reject(Error('timeout'));x.send(file)})}
 async function register(id,v,sha){const r=await fetch(API+'/rest/v1/rpc/vdtnext_register_upload',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({p_id:id,p_research_id:v.researchId,p_age:v.age,p_measured_on:v.measuredOn,p_font_order:v.fontOrder,p_research_consent:v.consent,p_sha256:sha,p_student_number:v.studentNumber,p_file_type:v.file.name.toLowerCase().endsWith('.csv')?'csv':'zip'})});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error('register '+r.status+' '+(j.message||''));return j}
 $('form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;$('err').textContent='';const v=readForm();if(v.error){$('err').textContent=v.error;return}
  busy=true;$('submitBtn').disabled=true;$('progress').hidden=false;$('progress').value=0;$('status').textContent='ファイルを確認しています…';
@@ -59,6 +59,6 @@ $('form').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;
   if(!pending.uploaded){await upload(pending.id,v.file);pending.uploaded=true}
   $('progress').value=100;$('status').textContent='保存を確認しています…';const res=await register(pending.id,v,sha);
   $('form').hidden=true;$('done').hidden=false;$('receipt').textContent=res.receipt;$('doneDetail').textContent='保存を確認したサイズ：'+(res.stored_bytes/1048576).toFixed(1)+'MB（'+Number(res.stored_bytes).toLocaleString('ja-JP')+' バイト）';pending=null;window.scrollTo(0,0)
- }catch(x){const m=String(x.message||x);$('err').textContent=m==='notzip'?'ZIPファイルの形式を確認してください。':/^upload 413|maximum allowed size/i.test(m)?'ファイルが大きすぎます。':'送信できませんでした。電波の良い場所で、もう一度「提出する」を押してください（二重提出にはなりません）。';$('status').textContent='詳細：'+m.slice(0,160)}
+ }catch(x){const m=String(x.message||x);$('err').textContent=m==='notzip'?'ZIPファイルの形式を確認してください。':/^upload 413|maximum allowed size/i.test(m)?'ファイルが大きすぎます。' :m.includes('upload 403')?'サーバーの保存権限で拒否されました。利用者側の操作ではありません。担当者にお知らせください。':'送信を完了できませんでした。詳細を確認してください。';$('status').textContent='詳細：'+m.slice(0,160)}
  finally{busy=false;$('submitBtn').disabled=false}});
 </script></body></html>
