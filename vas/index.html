@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VDT視覚探索｜VASアンケート</title>
+<style>
+body{font-family:system-ui,"Noto Sans JP",sans-serif;background:#f1f5f8;color:#192f40;margin:0}main{background:white;max-width:680px;margin:20px auto;padding:26px;border-radius:14px}h1{font-size:1.5rem}p{line-height:1.6}label{display:block;margin:12px 0 7px}input[type=text],select{width:100%;font:inherit;padding:12px;box-sizing:border-box}fieldset{margin:16px 0;border:1px solid #d0dce5;border-radius:10px;padding:13px}legend{font-weight:bold}input[type=range]{width:80%;accent-color:#14799b}output{font-weight:bold;font-size:1.3rem;margin-left:12px}.ends{display:flex;justify-content:space-between;font-size:.78rem;color:#536775}button{width:100%;padding:14px;background:#126f92;border:0;border-radius:9px;color:white;font:inherit;font-weight:bold}button:disabled{background:#9daeb8}.notice{background:#fff7df;border-left:4px solid #d19a2d;padding:11px}.status{background:#edf6f9;padding:12px;margin:15px 0;white-space:pre-wrap}.bad{background:#ffeded;color:#8c1322}.small{font-size:.87rem;color:#536775}.hidden{display:none}@media(max-width:700px){main{margin:0;border-radius:0;padding:17px}}
+</style></head><body><main>
+<h1>第8教材｜視覚探索の前後VAS</h1>
+<p>12ポイントの文字探索（10分間）について、開始直前と終了直後に、同じ5項目を回答します。</p>
+<p class="notice"><b>授業用記録です。</b>研究利用の同意は別途説明・確認します。氏名・学籍番号は入力しないでください。負担があれば中断できます。</p>
+<form id="form"><label for="rid">研究用ID（姿勢データと共通）</label><input id="rid" type="text" required maxlength="32" autocomplete="off" placeholder="例：V001">
+<label for="phase">回答時点</label><select id="phase" required><option value="">選択してください</option><option value="before">開始直前 T0</option><option value="after">終了直後 T1</option></select>
+<p class="small">0＝まったくない、100＝想像できる最大の強さ。Webスライダーによる0–100の評定です（紙の100mm VASと同一ではありません）。</p>
+<div id="items"></div><label><input type="checkbox" id="confirm" required> 授業用の回答として保存することを確認しました（研究利用への同意とは別です）</label>
+<button id="send" type="submit">サーバーに回答を保存</button>
+<div class="status" id="status" role="status" aria-live="polite">未送信です。「保存済み」と表示されるまで画面を閉じないでください。</div></form>
+<section id="done" class="hidden"><h2>サーバーに保存されました</h2><p>受付番号：<strong id="receipt"></strong></p><button id="next" type="button">次の測定時点を回答</button></section>
+<p class="small">通信失敗時は未確認の回答がブラウザに一時保存されます。共有端末では注意してください。</p></main>
+<script>
+'use strict';
+const API='https://plirzczxdhddfcxldnxj.supabase.co/rest/v1/vdt_vas_responses';
+const KEY='sb_publishable_NCH7QuER6v_83QHr8RvVkA_9U2oprUz';
+const qs=[['eye','目の疲れ'],['neck','首・肩のこり・痛み'],['back','腰・背中の不快感'],['fatigue','身体全体の疲れ'],['focus','集中のしづらさ']];
+const el=id=>document.getElementById(id);
+el('items').innerHTML=qs.map(([id,name],i)=>'<fieldset><legend>'+(i+1)+'. '+name+'</legend><input type="range" id="'+id+'" min="0" max="100" value="0" step="1"><output id="'+id+'v">0</output><div class="ends"><span>0：まったくない</span><span>100：最大の強さ</span></div></fieldset>').join('');
+qs.forEach(([id])=>el(id).addEventListener('input',()=>el(id+'v').textContent=el(id).value));
+const pendingKey='vdt-vas-pending-v1';let pending=null;
+try{pending=JSON.parse(sessionStorage.getItem(pendingKey)||'null')}catch{}
+if(pending){el('rid').value=pending.research_id;el('phase').value=pending.phase;qs.forEach(([id])=>{el(id).value=pending[id];el(id+'v').textContent=pending[id]});el('confirm').checked=true;el('status').textContent='前回の未確認回答が残っています。再送できます。'}
+el('form').addEventListener('submit',async e=>{
+e.preventDefault();const rid=el('rid').value.trim(),phase=el('phase').value;
+if(!/^[a-zA-Z0-9_-]{1,32}$/.test(rid)||!['before','after'].includes(phase)||!el('confirm').checked){el('status').textContent='研究用ID・回答時点・確認欄を確かめてください。';return}
+const row={id:pending?.id||crypto.randomUUID(),research_id:rid,phase};qs.forEach(([id])=>row[id]=Number(el(id).value));
+if(pending&&JSON.stringify(pending)!==JSON.stringify(row)){el('status').textContent='未送信の回答を変更できません。元の値に戻してください。';return}
+pending=row;sessionStorage.setItem(pendingKey,JSON.stringify(row));el('send').disabled=true;el('status').className='status';el('status').textContent='送信中…';
+try{const r=await fetch(API,{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(row)});
+if(!r.ok)throw new Error('HTTP '+r.status+': '+(await r.text()).slice(0,120));
+sessionStorage.removeItem(pendingKey);pending=null;el('form').classList.add('hidden');el('done').classList.remove('hidden');el('receipt').textContent=row.id.slice(0,8).toUpperCase()}
+catch(err){el('status').className='status bad';el('status').textContent='保存を確認できませんでした。再送してください。\n'+String(err.message||err)}
+finally{el('send').disabled=false}});
+el('next').addEventListener('click',()=>location.reload());
+</script></body></html>
