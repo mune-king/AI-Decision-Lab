@@ -1,4 +1,21 @@
+v0.4 verification (2026-11-01, synthetic data only; run: python verify_package.py)
+Linux / Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2: ALL CHECKS PASSED (24 checks).
+1. Synthetic demo reruns. Injected +0.13 log return ranked first and flagged as a check candidate.
+2. Before/after comparison on the same synthetic input (SHA256 d405f713...) and conditions:
+   v0.3 (commit 2700358) and v0.4 outputs are byte-identical for results.csv, scales.csv,
+   scale_sensitivity.csv, prices_returns.csv, return_diagnostics.csv, largest_moves_top5.csv,
+   outlier_candidates.csv, diagnostics_method.json and audit.json.
+   H_RS = 0.575643 (R2 0.970428), alpha_DFA1 = 0.656115 (R2 0.819133), 219 returns, scales 16-54.
+3. Ten invalid inputs (missing file, wrong column name, <20 rows, duplicate timestamp, unsorted,
+   non-numeric close, non-positive close, 4h-like intraday rows, unreadable datetime, too short for
+   scales) stop with a Japanese cause + fix message and save no results folder.
+4. RESULT_SUMMARY_JA.txt values match results.csv, largest_moves_top5.csv and audit.json.
+Behavior change: a UTF-8 BOM before the first column name (Excel "CSV UTF-8") is now accepted;
+previously it caused a missing-column error. Input bytes and SHA256 are unaffected.
+Not verified: Windows and macOS were not tested. No real market data were run.
+No actual market data or real-market outputs are included.
+
+v0.3 (2026-10-29)
 Linux / Python 3.12: synthetic demo completed.
 Injected +0.13 log-return ranked first and flagged as a check candidate.
-No actual market data or real-market outputs are included.
 Windows/Mac not tested.

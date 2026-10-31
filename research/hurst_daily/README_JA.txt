@@ -1,9 +1,14 @@
-研究・教育用 日足R/S・DFA1解析 v0.3（2026-10-29）
+研究・教育用 日足R/S・DFA1解析 v0.4（2026-11-01）
 
 今回の到達点：自分で今年の市場データを取得し、結果の数値と図を読み、X調査との対応を報告する。
 この配布物には実相場データを含みません。--demoは合成データだけの起動練習です。
 以前の独立作成コードを基に、入力銘柄を決めつける図題を修正し、変動の大きい日の確認用出力を追加しました。
 Claude/GitHub側コードを検証・統合した版ではありません。
+v0.4の追加：入力エラーの日本語案内（原因と直し方）、結果概要 RESULT_SUMMARY_JA.txt の自動出力、
+入力情報ひな型 INPUT_INFO_TEMPLATE.txt と --info、投稿と価格の空の対応表 X_PRICE_TEMPLATE.csv、
+学生用手順 STUDENT_3STEPS_JA.md、予稿の項目案内 PAPER_ITEMS_JA.md、自己点検 verify_package.py。
+解析の計算はv0.3から変更していません（合成デモで全出力が一致することを確認済み）。
+学生はまず STUDENT_3STEPS_JA.md を読んでください。
 
 【まず動かす】
 Python 3.10以上が必要です。ZIPを展開し、そのフォルダで実行します。
@@ -18,7 +23,8 @@ Pythonをまだ入れていない・インストールが失敗する場合は�
 例：datetimeは2026-01-05T15:30:00+09:00のような形式。
 提供元の実際の日時を保ち、例の時刻をコピーして実データの時刻を作らないでください。
 time（Unix秒）,closeの形式も使用可能です。
-python run_student.py my_daily.csv
+python run_student.py my_daily.csv --info my_info.txt
+（my_info.txt は INPUT_INFO_TEMPLATE.txt をコピーして記入したもの。--info は省略可）
 最終行が未確定なら、確定行だけを取得するか --drop-last を明示して実行します。
 休日の行を足したり、欠測を補間したりしないでください。
 この版は日足専用で、4時間足を入力すると同じ日に複数行があるため停止します。
@@ -26,6 +32,7 @@ python run_student.py my_daily.csv
 
 【結果の場所・報告する数値】
 results/実行時刻/ に毎回別フォルダで保存します。
+RESULT_SUMMARY_JA.txt：主要数値・尺度ごとの窓数・上位5日・図の保存先・入力ハッシュ・コードの版・未確認点の概要。
 results.csv：method=R/SのexponentがH_RS、method=DFA1のexponentがalpha_DFA1。
 returns_used＝収益率の点数、min_scale/max_scale＝傾きを測った観測点単位の尺度範囲。
 loglog_R2＝直線への当てはまりで、有意性・予測の正しさを示す数値ではありません。
