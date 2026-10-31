@@ -1,0 +1,1 @@
+Copyright (c) 2026. Permission is granted to use, copy, modify, and distribute the independently authored code in this package for research and teaching, without warranty. No rights to the user-supplied market data, trademarks, or third-party libraries are granted. This is independent code, not an inspected or integrated Claude PR.
