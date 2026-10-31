@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>VDT視覚探索｜VASアンケート</title>
+<style>
+body{font-family:system-ui,"Noto Sans JP",sans-serif;background:#f1f5f8;color:#192f40;margin:0}main{background:white;max-width:680px;margin:20px auto;padding:26px;border-radius:14px}h1{font-size:1.5rem}p{line-height:1.6}label{display:block;margin:12px 0 7px}input[type=text],select{width:100%;font:inherit;padding:12px;box-sizing:border-box}fieldset{margin:16px 0;border:1px solid #d0dce5;border-radius:10px;padding:13px}fieldset.todo{border-color:#d19a2d}legend{font-weight:bold}input[type=range]{width:78%;accent-color:#14799b}input[type=range].untouched{opacity:.45}output{font-weight:bold;font-size:1.2rem;margin-left:12px}.ends{display:flex;justify-content:space-between;font-size:.78rem;color:#536775}button{width:100%;padding:14px;background:#126f92;border:0;border-radius:9px;color:white;font:inherit;font-weight:bold;margin-top:6px}button:disabled{background:#9daeb8}button.sub{background:#fff;color:#126f92;border:1px solid #126f92}.notice{background:#fff7df;border-left:4px solid #d19a2d;padding:11px}.test{background:#efe9ff;border-left:4px solid #6a4fc4;padding:11px}.status{background:#edf6f9;padding:12px;margin:15px 0;white-space:pre-wrap}.bad{background:#ffeded;color:#8c1322}.small{font-size:.87rem;color:#536775}.hidden{display:none}.radio label{margin:8px 0}@media(max-width:700px){main{margin:0;border-radius:0;padding:17px}}
+</style></head><body><main>
+<h1>第8教材｜視覚探索の前後VAS</h1>
+<p>12ポイントの文字探索（10分間）について、<b>開始直前（T0）</b>と<b>終了直後（T1）</b>に、同じ5項目を回答します。</p>
+<p class="notice"><b>氏名・学籍番号は入力しないでください。</b>研究用IDは姿勢データ（vdtNext）と同じものを使います。負担があればいつでも中断できます。</p>
+<form id="form" novalidate>
+<label for="rid">研究用ID（姿勢データと共通）</label><input id="rid" type="text" required maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="配布された研究用ID（例：V001）">
+<p id="testNote" class="test hidden">TESTで始まるIDは動作確認用です。研究データには含まれません。</p>
+<label for="phase">回答時点</label><select id="phase" required><option value="">選択してください</option><option value="before">開始直前 T0（実験前）</option><option value="after">終了直後 T1（実験後）</option></select>
+<p class="small">0＝まったくない、100＝想像できる最大の強さ。<b>各項目のつまみを必ず一度動かして</b>、今の感覚に合う位置に置いてください（0のときも一度触れてください）。Webスライダーによる0–100の評定で、紙の100mm VASと同一ではありません。</p>
+<div id="items"></div>
+<fieldset><legend>研究利用への同意（授業の記録とは別です）</legend>
+<p class="small">この回答は授業の記録として保存されます。研究に使うことに<b>同意するかどうかは自由</b>で、同意しなくても保存され、成績には一切影響しません。研究の目的・保管期間・同意撤回の方法は、別に配布する説明文書で確認してください。</p>
+<div class="radio" role="radiogroup" aria-label="研究利用への同意">
+<label><input type="radio" name="consent" value="agree"> 説明文書を読み、この回答を研究に使うことに同意します</label>
+<label><input type="radio" name="consent" value="disagree"> 同意しません（授業の記録としてのみ扱う）</label></div></fieldset>
+<button id="send" type="submit">サーバーに回答を保存</button>
+<button id="discard" type="button" class="sub hidden">未確認の回答を破棄して入力し直す</button>
+<div class="status" id="status" role="status" aria-live="polite">未送信です。「サーバーに保存されました」と表示されるまで画面を閉じないでください。</div></form>
+<section id="done" class="hidden"><h2>サーバーに保存されました</h2><p>受付番号：<strong id="receipt"></strong><br><span class="small" id="doneInfo"></span></p><p class="small">受付番号を控えるか、この画面をスクリーンショットしてください。</p><button id="next" type="button">次の測定時点を回答</button></section>
+<p class="small">通信に失敗したときは、未確認の回答がこのタブに一時保存され、同じ内容で再送できます（再送しても二重には保存されません）。</p></main>
+<script>
+'use strict';
+const API='https://plirzczxdhddfcxldnxj.supabase.co/rest/v1/rpc/vdt_vas_submit';
+const KEY='sb_publishable_NCH7QuER6v_83QHr8RvVkA_9U2oprUz';
+const qs=[['eye','目の疲れ'],['neck','首・肩のこり・痛み'],['back','腰・背中の不快感'],['fatigue','身体全体の疲れ'],['focus','集中のしづらさ']];
+const PHASE={before:'開始直前 T0',after:'終了直後 T1'};
+const pendingKey='vdt-vas-pending-v2',doneKey='vdt-vas-done-v2';
+const el=id=>document.getElementById(id);
+const store={get(s,k){try{return JSON.parse(s.getItem(k)||'null')}catch{return null}},set(s,k,v){try{s.setItem(k,JSON.stringify(v));return true}catch{return false}},del(s,k){try{s.removeItem(k)}catch{}}};
+el('items').innerHTML=qs.map(([id,name],i)=>'<fieldset id="'+id+'f"><legend>'+(i+1)+'. '+name+'</legend><input type="range" class="untouched" id="'+id+'" min="0" max="100" value="50" step="1" aria-label="'+name+'"><output id="'+id+'v">未回答</output><div class="ends"><span>0：まったくない</span><span>100：最大の強さ</span></div></fieldset>').join('');
+const touched=new Set();
+function mark(id){touched.add(id);el(id).classList.remove('untouched');el(id+'f').classList.remove('todo');el(id+'v').textContent=el(id).value}
+qs.forEach(([id])=>['input','change','pointerdown','keydown'].forEach(ev=>el(id).addEventListener(ev,()=>mark(id))));
+const consent=()=>(document.querySelector('input[name=consent]:checked')||{}).value||'';
+el('rid').addEventListener('input',()=>el('testNote').classList.toggle('hidden',!/^test/i.test(el('rid').value.trim())));
+function setStatus(t,bad){el('status').className='status'+(bad?' bad':'');el('status').textContent=t}
+function lock(on){['rid','phase'].concat(qs.map(q=>q[0])).forEach(i=>el(i).disabled=on);document.querySelectorAll('input[name=consent]').forEach(r=>r.disabled=on);el('discard').classList.toggle('hidden',!on)}
+
+let pending=store.get(sessionStorage,pendingKey);
+if(pending){el('rid').value=pending.p_research_id;el('phase').value=pending.p_phase;qs.forEach(([id])=>{el(id).value=pending['p_'+id];mark(id)});
+ const r=document.querySelector('input[name=consent][value="'+pending.p_research_consent+'"]');if(r)r.checked=true;
+ el('rid').dispatchEvent(new Event('input'));lock(true);setStatus('前回、保存を確認できなかった回答が残っています。同じ内容のまま「サーバーに回答を保存」を押して再送してください（二重には保存されません）。',true)}
+
+el('discard').addEventListener('click',()=>{if(!confirm('未確認の回答を破棄します。すでにサーバーに届いていた場合、入力し直すと2件になります。よろしいですか？'))return;store.del(sessionStorage,pendingKey);location.reload()});
+
+el('form').addEventListener('submit',async e=>{
+ e.preventDefault();
+ let row=pending;
+ if(!row){
+  const rid=el('rid').value.trim(),phase=el('phase').value,c=consent();
+  if(!/^[A-Za-z0-9_-]{1,32}$/.test(rid))return setStatus('研究用IDを半角英数字（- _ も可、32文字まで）で入力してください。',true);
+  if(!PHASE[phase])return setStatus('回答時点（開始直前 T0／終了直後 T1）を選んでください。',true);
+  const miss=qs.filter(([id])=>!touched.has(id));
+  if(miss.length){miss.forEach(([id])=>el(id+'f').classList.add('todo'));return setStatus('まだ動かしていない項目があります：'+miss.map(q=>q[1]).join('、'),true)}
+  if(!['agree','disagree'].includes(c))return setStatus('研究利用への同意について、どちらかを選んでください。',true);
+  const done=store.get(localStorage,doneKey)||{};
+  if(done[rid+'|'+phase]&&!confirm('このブラウザでは、ID '+rid+' の「'+PHASE[phase]+'」をすでに送信済みです（受付番号 '+done[rid+'|'+phase]+'）。もう一度送信しますか？'))return;
+  row={p_id:crypto.randomUUID(),p_research_id:rid,p_phase:phase,p_research_consent:c};qs.forEach(([id])=>row['p_'+id]=Number(el(id).value));
+  pending=row;store.set(sessionStorage,pendingKey,row);lock(true);
+ }
+ el('send').disabled=true;el('discard').disabled=true;setStatus('送信中…');
+ try{
+  const r=await fetch(API,{method:'POST',headers:{'apikey':KEY,'Content-Type':'application/json'},body:JSON.stringify(row)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!['saved','already_saved'].includes(j.status))throw new Error('HTTP '+r.status+(j.message?': '+j.message:''));
+  store.del(sessionStorage,pendingKey);pending=null;
+  const done=store.get(localStorage,doneKey)||{};done[row.p_research_id+'|'+row.p_phase]=j.receipt;store.set(localStorage,doneKey,done);
+  el('form').classList.add('hidden');el('done').classList.remove('hidden');el('receipt').textContent=j.receipt;
+  el('doneInfo').textContent='研究用ID '+row.p_research_id+'／'+PHASE[row.p_phase]+(j.status==='already_saved'?'（前回の送信がすでに届いていました）':'');
+  el('next').dataset.rid=row.p_research_id;el('next').dataset.phase=row.p_phase;
+ }catch(err){setStatus('保存を確認できませんでした。通信状態を確かめて、同じ内容のまま再送してください。\n'+String(err.message||err),true)}
+ finally{el('send').disabled=false;el('discard').disabled=false}
+});
+el('next').addEventListener('click',()=>{const n=el('next').dataset;store.set(sessionStorage,'vdt-vas-next-v2',{rid:n.rid,phase:n.phase==='before'?'after':'before'});location.reload()});
+if(!pending){const n=store.get(sessionStorage,'vdt-vas-next-v2');store.del(sessionStorage,'vdt-vas-next-v2');if(n&&/^[A-Za-z0-9_-]{1,32}$/.test(n.rid||'')){el('rid').value=n.rid;el('rid').dispatchEvent(new Event('input'));if(PHASE[n.phase])el('phase').value=n.phase}}
+</script></body></html>
