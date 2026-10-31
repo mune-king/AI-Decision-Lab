@@ -1,0 +1,4 @@
+Linux / Python 3.12: synthetic demo completed.
+Injected +0.13 log-return ranked first and flagged as a check candidate.
+No actual market data or real-market outputs are included.
+Windows/Mac not tested.
