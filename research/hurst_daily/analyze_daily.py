@@ -49,7 +49,8 @@ def load_daily(path, drop_last=False):
               '大文字・空白も区別します（Close や " close" は不可）。')
     if len(raw) < 20:
         _fail(f'行数が{len(raw)}行しかありません（最低20行）。',
-              '2026年1月から最新確定日までの日足を取得し直してください。')
+              '取得期間が予定どおりか、取得漏れ・欠測・入力形式の問題がないかを確認してください。'
+              '解消できなければ、期間・本数とこのエラー全文を報告してください。')
     field = 'time' if 'time' in raw else 'datetime'
     if field == 'time' and pd.api.types.is_numeric_dtype(raw[field]):
         times = pd.DatetimeIndex(pd.to_datetime(raw[field], unit='s', utc=True)).tz_convert('Asia/Tokyo')
@@ -142,11 +143,33 @@ def fluctuations(x, scales):
     return pd.DataFrame(rows)
 
 
+SHORTAGE_GUIDE = (
+    '  直し方（まず確認すること）：\n'
+    '   1. 取得期間が予定どおりか（2026年1月から最新確定日まで取れているか）。\n'
+    '   2. 取得漏れ・欠測・入力形式の問題（途中で切れた保存、ページ分割された取得、別の足の混入など）がないか。\n'
+    '   3. 期間を見直して、必要な観測点数を確保できるか。\n'
+    '  不足を解消できなければ、上の期間・本数とこのエラー全文を報告してください。\n'
+    '  計算を通すためだけに尺度（--min-scale / --max-scale）を変えないでください。\n'
+    '  解析条件を変える必要があると考える場合は、変更せずにその理由と影響を報告して相談してください。')
+
+
+class DataShortage(ValueError):
+    """Too few observations for the scale analysis."""
+
+
+def _shortage(audit, n, detail):
+    return InputError(
+        f'データが不足しているため解析できません：{detail}\n'
+        f'  入力期間（JST）：{audit["analysis_first_timestamp_jst"]} ～ {audit["analysis_last_timestamp_jst"]}、'
+        f'価格{audit["price_rows_used"]}本・収益率{n}点'
+        f'（元ファイル{audit["source_rows"]}行、--drop-last {"あり" if audit["drop_last"] else "なし"}）\n'
+        + SHORTAGE_GUIDE)
+
+
 def fit(table, column, count):
     usable = (table[column] > 0) & np.isfinite(table[column]) & (table[count] >= 4)
     if usable.sum() < 4:
-        raise InputError('有効な尺度が4つ未満です（各尺度で窓4個以上が必要）。\n'
-                         '  直し方：収益率の点数を増やすか、--min-scale を小さくしてください。')
+        raise DataShortage('有効な尺度が4つ未満です（各尺度で重ならない窓が4個以上必要）。')
     xx = np.log(table.loc[usable, 'scale_observations'].to_numpy())
     yy = np.log(table.loc[usable, column].to_numpy())
     slope, intercept = np.polyfit(xx, yy, 1)
@@ -163,17 +186,23 @@ def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
     x = frame['log_return'].iloc[1:].to_numpy()
     max_scale = len(x)//4 if max_scale is None else max_scale
     if not 4 <= min_scale < max_scale <= len(x)//4:
-        raise InputError(f'尺度範囲が不適切です：min={min_scale}, max={max_scale}, 収益率{len(x)}点'
-                         f'（上限は {len(x)//4}）。\n'
-                         f'  直し方：既定の最小尺度16では収益率が68点以上必要です。'
-                         f'データを増やすか、4 <= min < max <= {len(x)//4} を満たすよう指定してください。')
+        if len(x)//4 <= min_scale:
+            raise _shortage(audit, len(x), f'最小尺度{min_scale}点で各尺度に窓4個以上を取るには、'
+                                           f'収益率が{4*(min_scale+1)}点以上必要です（現在{len(x)}点）。')
+        raise InputError(f'指定した尺度範囲が使えません：min={min_scale}, max={max_scale}'
+                         f'（4 <= min < max <= 収益率{len(x)}点 // 4 = {len(x)//4} が必要）。\n'
+                         '  直し方：通常は --min-scale / --max-scale を指定せず既定値で実行してください。'
+                         '条件を変える場合は、理由と影響を記録して報告してください。')
     scales = np.unique(np.round(np.geomspace(min_scale, max_scale, 12)).astype(int))
     table = fluctuations(x, scales)
     results = []
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
     for ax, method, column, count, name in zip(axes, ['R/S', 'DFA1'], ['rs_mean', 'dfa_F'],
                                             ['rs_windows', 'dfa_windows'], ['H_RS', 'alpha_DFA1']):
-        exponent, intercept, r2, usable = fit(table, column, count)
+        try:
+            exponent, intercept, r2, usable = fit(table, column, count)
+        except DataShortage as exc:
+            raise _shortage(audit, len(x), str(exc)) from None
         selected = table.loc[usable, 'scale_observations']
         results.append({'method': method, 'exponent_name': name, 'exponent': exponent, 'loglog_R2': r2,
                         'min_scale': int(selected.min()), 'max_scale': int(selected.max()),

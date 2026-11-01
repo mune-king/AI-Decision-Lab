@@ -1,3 +1,20 @@
+v0.4.1 verification (2026-11-01, synthetic data only)
+Commands: python run_student.py --demo ; python verify_package.py
+Linux / Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2: ALL CHECKS PASSED
+(26 checks = the 24 v0.4 checks, unchanged, + 2 new checks below).
+Fixes: (1) STUDENT_3STEPS_JA.md said "+13%" for the injected log return 0.13; now
+"log return 0.13 (simple change about 13.9%)". The summary now shows log_return and the simple
+change, and README/student guide state that return_percent = 100 x log return.
+(2) Data-shortage messages no longer suggest shrinking --min-scale. They show the input period
+and counts, ask to check the planned period, missing/partial downloads and input format, and to
+report period, counts and the full error if the shortage cannot be resolved.
+Before/after: the 9 numeric/audit outputs of the synthetic demo are byte-identical to v0.3
+(commit 2700358) and v0.4 (commit 75c512a): H_RS = 0.575643, alpha_DFA1 = 0.656115.
+Only RESULT_SUMMARY_JA.txt wording changed. Synthetic data and calculations unchanged.
+New checks: summary shows +0.1300 and about +13.9%; a 40-row input stops with the new shortage
+guidance and does not tell the user to shrink scales.
+Not verified: Windows and macOS. No real market data were run. Student runs not done.
+
 v0.4 verification (2026-11-01, synthetic data only; run: python verify_package.py)
 Linux / Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2: ALL CHECKS PASSED (24 checks).
 1. Synthetic demo reruns. Injected +0.13 log return ranked first and flagged as a check candidate.

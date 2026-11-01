@@ -14,7 +14,7 @@ python -m pip install -r requirements.txt
 python run_student.py --demo
 ```
 
-`results/実行時刻/RESULT_SUMMARY_JA.txt` が出れば成功です。合成デモでは、わざと入れた +13% の日（2026-05-25）が変動1位・確認候補になります。**これは乱数による練習で、市場の結果ではありません。**
+`results/実行時刻/RESULT_SUMMARY_JA.txt` が出れば成功です。合成デモでは、わざと入れた対数収益率0.13（単純騰落率では約13.9%）の日（2026-05-25）が変動1位・確認候補になります。**これは乱数による練習で、市場の結果ではありません。**
 
 インストールで止まったら、OS・実行したコマンド・画面のエラー全文を報告してください。
 
@@ -45,7 +45,7 @@ python run_student.py --demo
 python run_student.py my_daily.csv --info my_info.txt
 ```
 
-ファイル名は自分のものに置き換えます。最終行が未確定だと**確認できた場合だけ** `--drop-last` を付け、その理由を記録します。入力に問題があると、原因と直し方が日本語で表示されます（その場合、結果は保存されません）。
+ファイル名は自分のものに置き換えます。「データが不足しているため解析できません」と出た場合は、**尺度の指定を変えずに**、取得期間・取得漏れ・欠測・入力形式を確認します。解消できなければ、表示された期間・本数とエラー全文を報告してください。最終行が未確定だと**確認できた場合だけ** `--drop-last` を付け、その理由を記録します。入力に問題があると、原因と直し方が日本語で表示されます（その場合、結果は保存されません）。
 
 まず `RESULT_SUMMARY_JA.txt` を開き、次の元ファイルで数値を確かめます。
 
@@ -54,7 +54,7 @@ python run_student.py my_daily.csv --info my_info.txt
 | `results.csv` | R/S行の `exponent` が **H_RS**、DFA1行の `exponent` が **alpha_DFA1**。`returns_used`（収益率の点数）、`min_scale`/`max_scale`（尺度範囲） |
 | `prices_returns.png` | 上段：終値、下段：対数収益率。大きな上下や不連続の位置 |
 | `scaling.png`・`scales.csv` | 点が直線から曲がっていないか。各尺度の窓の数 |
-| `return_diagnostics.png`・`largest_moves_top5.csv` | 変動の大きい上位5日。赤点は外れ値の**確認候補** |
+| `return_diagnostics.png`・`largest_moves_top5.csv` | 変動の大きい上位5日。赤点は外れ値の**確認候補**。`log_return` が対数収益率、`return_percent` はその100倍で、単純騰落率ではない |
 | `outlier_candidates.csv` | 候補の日付と値を原資料で照合（実際の大変動・限月交代・欠測・取得ミス） |
 | `audit.json` | 入力期間・本数・データのハッシュ・実行条件 |
 

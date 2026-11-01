@@ -8,9 +8,10 @@ import json
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-CODE_VERSION = 'v0.4（2026-11-01、学生用3ステップ整備版）'
+CODE_VERSION = 'v0.4.1（2026-11-01、学生用3ステップ整備版）'
 INFO_KEYS = ['取得元URL', '銘柄', '種別（現物指数／先物／CFD）', '先物の限月つなぎ・価格調整', '足',
              '期間', '本数', 'タイムゾーン', '日時の意味（取引日／足の開始／足の終了）', '終値の定義',
              '取得日時', '最終行が確定足か', '未確認点']
@@ -103,7 +104,9 @@ def write_summary(output, base, info_path=None, demo=False):
         z = '算出不可' if pd.isna(row['modified_z']) else fmt(float(row['modified_z']), 2)
         flag = '確認候補' if bool(row['check_candidate_abs_z_gt_3p5']) else '－'
         add(f'{int(row["absolute_return_rank"])}位 {str(row["timestamp_jst"])[:10]}  '
-            f'対数収益率 {float(row["return_percent"]):+.3f}%  modified_z={z}  {flag}')
+            f'対数収益率 {float(row["log_return"]):+.4f}（単純騰落率 約{100*np.expm1(float(row["log_return"])):+.1f}%）'
+            f'  modified_z={z}  {flag}')
+    add('※CSVの return_percent は対数収益率×100の値で、単純騰落率（%）ではありません。')
     add(f'外れ値の確認候補（|modified_z|>{method["threshold"]}）：{len(cand)}件（outlier_candidates.csv）')
     if not method['MAD'] > 0:
         add('MADが0のためmodified_zは算出できません。上位5日の確認だけを使ってください。')

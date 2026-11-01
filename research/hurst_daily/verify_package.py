@@ -71,6 +71,8 @@ check(f"{res.loc['R/S', 'exponent']:.4f}" in summary and f"{res.loc['DFA1', 'exp
 check(audit['input_sha256'] in summary, 'summary input SHA256 matches audit.json')
 check(all(str(d)[:10] in summary for d in top['timestamp_jst']), 'summary lists the same top-5 dates')
 check('合成デモ' in summary, 'summary labels synthetic demo')
+check(f"{top.iloc[0]['log_return']:+.4f}" in summary and '約+13.9%' in summary,
+      'summary shows log return 0.13 and simple change ~13.9% (not "+13%")')
 
 # 3: invalid inputs -> Japanese message, no result folder
 good = pd.read_csv(BASE/'SYNTHETIC_DEMO_NOT_MARKET.csv')
@@ -98,6 +100,10 @@ with tempfile.TemporaryDirectory() as tmp:
         message = proc.stderr + proc.stdout
         check(proc.returncode != 0 and '直し方' in message and newest_result(before) is None,
               f'invalid input "{name}" -> Japanese fix message, nothing saved')
+        if name == 'too short for scales':
+            check('データが不足' in message and '取得期間' in message and '取得漏れ' in message
+                  and '報告' in message and 'を小さく' not in message,
+                  'shortage message asks to check period / missing data / point count, not to shrink scales')
 
 print()
 print('ALL CHECKS PASSED' if not failures else f'{len(failures)} CHECK(S) FAILED: {failures}')
