@@ -13,7 +13,7 @@ import sys
 from analyze_daily import run
 from summary_ja import write_summary
 
-def diagnostics(output):
+def diagnostics(output, banner=''):
     df = pd.read_csv(output/'prices_returns.csv')
     df = df.iloc[1:].copy()
     r = df['log_return'].to_numpy()
@@ -36,7 +36,7 @@ def diagnostics(output):
     ax.scatter(dates[marked],df.loc[marked,'return_percent'],c='red',label='Check candidate: |modified z| > 3.5')
     for i,row in top.iterrows():
         ax.annotate(str(row['timestamp_jst'])[:10],(dates.loc[i],row['return_percent']),fontsize=7,xytext=(3,5),textcoords='offset points')
-    ax.set(xlabel='Source bar timestamp (JST)',ylabel='Log return (%)',title='Large moves for source checking; observations retained')
+    ax.set(xlabel='Source bar timestamp (JST)',ylabel='Log return (%)',title=f'{banner}Large moves for source checking; observations retained')
     ax.legend(fontsize=8); ax.grid(alpha=.2); fig.tight_layout()
     fig.savefig(output/'return_diagnostics.png',dpi=150);plt.close(fig)
     (output/'diagnostics_method.json').write_text(json.dumps({'median':median,'MAD':mad,'modified_z':'0.67448975*(return-median)/MAD','threshold':3.5,'MAD_zero':'scores unavailable; top5 remains usable','interpretation':'Exploratory check candidates, not errors. No observations deleted.'},indent=2))
@@ -60,20 +60,22 @@ def main():
         returns = rng.normal(0,.01,219)
         returns[100] = .13
         prices = 100*np.exp(np.r_[0,np.cumsum(returns)])
-        dates = pd.bdate_range('2026-01-02',periods=220,tz='Asia/Tokyo')+pd.Timedelta(hours=15,minutes=30)
+        # Same timestamps as v0.3; built without Timedelta addition, which warns under pandas 2.x.
+        dates = pd.bdate_range('2026-01-02 15:30',periods=220,tz='Asia/Tokyo',normalize=False)
         pd.DataFrame({'datetime':dates.astype(str),'close':prices}).to_csv(sample,index=False)
         source = sample
         print('SYNTHETIC DEMO ONLY: generated numbers, not market observations.')
         print('合成デモ：乱数で作った数値です。市場の観測結果ではありません。')
     else:
         source = Path(args.csv).resolve()
+    banner = 'SYNTHETIC DEMO - NOT MARKET DATA | ' if args.demo else ''
     output = base/'results'/datetime.now().strftime('%Y%m%d_%H%M%S_%f')
     try:
-        run(source,output,drop_last=args.drop_last)
+        run(source,output,drop_last=args.drop_last,banner=banner)
     except ValueError as exc:
         sys.exit(f'\n入力エラー：{exc}\n'
                  '結果は保存していません。直せない場合は、このメッセージ全文と試した操作を報告してください。')
-    diagnostics(output)
+    diagnostics(output, banner)
     if args.info:
         shutil.copyfile(args.info, output/'INPUT_INFO.txt')
     write_summary(output, base, info_path=args.info, demo=args.demo)

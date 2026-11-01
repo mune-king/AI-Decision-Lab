@@ -178,7 +178,7 @@ def fit(table, column, count):
     return float(slope), float(intercept), r2, usable
 
 
-def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
+def run(csv, out, drop_last=False, min_scale=16, max_scale=None, banner=''):
     out = Path(out)
     if out.exists() and any(out.iterdir()):
         raise InputError('出力先フォルダが空ではありません。\n  直し方：新しい --out フォルダを指定してください。')
@@ -213,7 +213,7 @@ def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
                   label=f'{name} = {exponent:.4f}\nR-squared = {r2:.4f}')
         ax.set(title=method, xlabel='Scale (daily return observations)', ylabel='Mean R/S' if method == 'R/S' else 'F(s)')
         ax.legend(); ax.grid(alpha=.2, which='both')
-    fig.suptitle(f'DAILY log returns (input instrument declared by user) | N = {len(x)}\n'
+    fig.suptitle(f'{banner}DAILY log returns (input instrument declared by user) | N = {len(x)}\n'
                  f'Forward nonoverlapping windows; source last row {"excluded" if drop_last else "included"}', fontsize=11)
     fig.tight_layout()
     out.mkdir(parents=True, exist_ok=True)
@@ -225,7 +225,7 @@ def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
     axes[1].plot(times.iloc[1:], 100*x, color='#dc6a3b', linewidth=.7)
     axes[1].set(ylabel='Log return (%)', xlabel='Source bar timestamp date (JST); trading-date mapping unverified')
     for ax in axes: ax.grid(alpha=.2)
-    fig.suptitle(f'DAILY INPUT | {len(frame)} price bars / {len(x)} log returns', fontsize=12)
+    fig.suptitle(f'{banner}DAILY INPUT | {len(frame)} price bars / {len(x)} log returns', fontsize=12)
     fig.tight_layout(); fig.savefig(out/'prices_returns.png', dpi=170); plt.close(fig)
     frame.to_csv(out/'prices_returns.csv', index=False)
     table.to_csv(out/'scales.csv', index=False)

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-CODE_VERSION = 'v0.4.1（2026-11-01、学生用3ステップ整備版）'
+CODE_VERSION = 'v0.4.2（2026-11-01、学生用3ステップ整備版）'
 INFO_KEYS = ['取得元URL', '銘柄', '種別（現物指数／先物／CFD）', '先物の限月つなぎ・価格調整', '足',
              '期間', '本数', 'タイムゾーン', '日時の意味（取引日／足の開始／足の終了）', '終値の定義',
              '取得日時', '最終行が確定足か', '未確認点']

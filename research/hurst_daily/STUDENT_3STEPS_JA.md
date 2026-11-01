@@ -4,7 +4,18 @@
 
 ## 0｜起動練習（5分）
 
-Python 3.10以上が必要です。このフォルダで実行します（Windowsで `python` が見つからなければ `py` に置き換えます）。
+Python 3.10以上が必要です（動作確認済みはLinuxのPython 3.11と3.13）。
+
+**フォルダの用意**：先生から渡されたZIPを展開するか、次のコマンドで取得し、`research/hurst_daily` フォルダへ移動します。以下のコマンドはすべてこのフォルダで実行します（Windowsで `python` が見つからなければ `py` に置き換えます）。
+
+```bash
+git clone --branch research/hurst-daily-handoff https://github.com/mune-king/AI-Decision-Lab.git
+```
+
+```bash
+cd AI-Decision-Lab/research/hurst_daily
+```
+
 
 ```bash
 python -m pip install -r requirements.txt
@@ -14,7 +25,9 @@ python -m pip install -r requirements.txt
 python run_student.py --demo
 ```
 
-`results/実行時刻/RESULT_SUMMARY_JA.txt` が出れば成功です。合成デモでは、わざと入れた対数収益率0.13（単純騰落率では約13.9%）の日（2026-05-25）が変動1位・確認候補になります。**これは乱数による練習で、市場の結果ではありません。**
+`results/実行時刻/RESULT_SUMMARY_JA.txt` が出れば成功です。合成デモでは、わざと入れた対数収益率0.13（単純騰落率では約13.9%）の日（2026-05-25）が変動1位・確認候補になります。**これは乱数による練習で、市場の結果ではありません。**図の上部にも `SYNTHETIC DEMO - NOT MARKET DATA` と表示されます。合成データの日付は11月以降まで続きますが、実在の相場ではありません。参考値は H_RS＝0.5756、alpha_DFA1＝0.6561、収益率219点、尺度16～54点です。
+
+動作がおかしいと思ったら `python verify_package.py` を実行し、最後の行が `ALL CHECKS PASSED` か確認してください。`FAIL` があれば、その表示全文を報告してください。
 
 インストールで止まったら、OS・実行したコマンド・画面のエラー全文を報告してください。
 
@@ -26,10 +39,11 @@ python run_student.py --demo
 
 1. 2026年1月から、取得時点で**確定している最新日**までの日足をCSVで保存する。
 2. 元CSVはそのまま保管し、解析用にコピーを作る。
-3. 解析用コピーの1行目を `datetime,close`（例：`2026-01-05T15:30:00+09:00`）または `time,close`（Unix秒）にする。
-4. 確認する：日付が古い順か、1日1行か、重複・欠測・0以下の価格・未確定の最終行がないか。
+3. 解析用コピー（例：`my_daily.csv`）を `research/hurst_daily` フォルダに置く。別の場所に置く場合は、実行時にファイルの場所も含めて指定する。
+4. 解析用コピーの1行目を `datetime,close`（例：`2026-01-05T15:30:00+09:00`）または `time,close`（Unix秒）にする。
+5. 確認する：日付が古い順か、1日1行か、重複・欠測・0以下の価格・未確定の最終行がないか。
    - 休日の行を足さない。欠測を補間しない。提供元にない時刻を作らない。
-5. `INPUT_INFO_TEMPLATE.txt` をコピーして（例：`my_info.txt`）記入する。種別は現物指数・先物・CFDのどれかを書き、先物なら限月のつなぎ方と価格調整も書く。分からない項目は空欄にして「未確認点」に書く。
+6. `INPUT_INFO_TEMPLATE.txt` をコピーして（例：`my_info.txt`）記入する。種別は現物指数・先物・CFDのどれかを書き、先物なら限月のつなぎ方と価格調整も書く。分からない項目は空欄にして「未確認点」に書く。
 
 現版は**日足専用**です。4時間足を入れると、同じ日に複数の行があるため停止します。
 
