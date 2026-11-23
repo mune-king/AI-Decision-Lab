@@ -1,4 +1,66 @@
+v0.4.2 pre-distribution check (2026-11-01, synthetic data only)
+Checked PR commit 22ef3a9, then fixed and re-verified. Commands, as in STUDENT_3STEPS_JA.md:
+  python -m pip install -r requirements.txt ; python run_student.py --demo ; python verify_package.py
+Environments (Linux, fresh venv each):
+  A. Python 3.13.18, numpy 2.5.4, pandas 2.3.3, matplotlib 3.11.2 (fresh clone, latest within requirements)
+  B. Python 3.11.18, numpy 1.26.4, pandas 2.1.4, matplotlib 3.8.4, tzdata 2024.1 (requirements lower bounds)
+  C. Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2 (development environment)
+Result: ALL CHECKS PASSED (28 checks) in A, B and C. Demo prints no warnings in A, B, C.
+H_RS = 0.5756425738, alpha_DFA1 = 0.6561148342, 219 returns, scales 16-54; log return 0.13
+(simple change about 13.9%) ranked first and is the only check candidate.
+Problems found at 22ef3a9 and fixed:
+ 1. Environment A printed a NumPy DeprecationWarning ("will raise an error in the future") from
+    the demo date construction. Dates are now built with bdate_range(..., normalize=False);
+    timestamps are identical (synthetic CSV byte-identical in A and C).
+ 2. Demo figures did not say they were synthetic; titles now begin "SYNTHETIC DEMO - NOT MARKET DATA".
+    PNG only; no CSV/JSON value changed.
+ 3. In environment B the synthetic CSV differs from v0.3 in the last printed digit of 38 closes
+    (relative ~1e-15), so its SHA256 differs and the old strict check failed. Exponents differ
+    at ~1e-15 and agree to 10 digits. This is environment rounding, not a calculation change.
+    The check now compares values (relative diff < 1e-12) when SHA256 differs and prints a note;
+    audit.json is not rewritten.
+ 4. Student guide lacked how to obtain the folder and where to put the CSV; added.
+Before/after (9 numeric/audit outputs vs v0.3 commit 2700358, same input and conditions):
+  A, C: 8 files byte-identical; audit.json differs only in library-version fields (environment).
+  B: same shapes and labels; numeric differences <= 1e-13 absolute (relative <= 6e-12 except
+     modified_z near zero, 3e-11); exponents equal to 10 digits. audit.json differs in SHA256 and versions.
+Not verified: Windows, macOS, Python 3.10. No real market data were run. Student runs not done.
+
+v0.4.1 verification (2026-11-01, synthetic data only)
+Commands: python run_student.py --demo ; python verify_package.py
+Linux / Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2: ALL CHECKS PASSED
+(26 checks = the 24 v0.4 checks, unchanged, + 2 new checks below).
+Fixes: (1) STUDENT_3STEPS_JA.md said "+13%" for the injected log return 0.13; now
+"log return 0.13 (simple change about 13.9%)". The summary now shows log_return and the simple
+change, and README/student guide state that return_percent = 100 x log return.
+(2) Data-shortage messages no longer suggest shrinking --min-scale. They show the input period
+and counts, ask to check the planned period, missing/partial downloads and input format, and to
+report period, counts and the full error if the shortage cannot be resolved.
+Before/after: the 9 numeric/audit outputs of the synthetic demo are byte-identical to v0.3
+(commit 2700358) and v0.4 (commit 75c512a): H_RS = 0.575643, alpha_DFA1 = 0.656115.
+Only RESULT_SUMMARY_JA.txt wording changed. Synthetic data and calculations unchanged.
+New checks: summary shows +0.1300 and about +13.9%; a 40-row input stops with the new shortage
+guidance and does not tell the user to shrink scales.
+Not verified: Windows and macOS. No real market data were run. Student runs not done.
+
+v0.4 verification (2026-11-01, synthetic data only; run: python verify_package.py)
+Linux / Python 3.13.18, numpy 2.5.3, pandas 3.0.5, matplotlib 3.11.2: ALL CHECKS PASSED (24 checks).
+1. Synthetic demo reruns. Injected +0.13 log return ranked first and flagged as a check candidate.
+2. Before/after comparison on the same synthetic input (SHA256 d405f713...) and conditions:
+   v0.3 (commit 2700358) and v0.4 outputs are byte-identical for results.csv, scales.csv,
+   scale_sensitivity.csv, prices_returns.csv, return_diagnostics.csv, largest_moves_top5.csv,
+   outlier_candidates.csv, diagnostics_method.json and audit.json.
+   H_RS = 0.575643 (R2 0.970428), alpha_DFA1 = 0.656115 (R2 0.819133), 219 returns, scales 16-54.
+3. Ten invalid inputs (missing file, wrong column name, <20 rows, duplicate timestamp, unsorted,
+   non-numeric close, non-positive close, 4h-like intraday rows, unreadable datetime, too short for
+   scales) stop with a Japanese cause + fix message and save no results folder.
+4. RESULT_SUMMARY_JA.txt values match results.csv, largest_moves_top5.csv and audit.json.
+Behavior change: a UTF-8 BOM before the first column name (Excel "CSV UTF-8") is now accepted;
+previously it caused a missing-column error. Input bytes and SHA256 are unaffected.
+Not verified: Windows and macOS were not tested. No real market data were run.
+No actual market data or real-market outputs are included.
+
+v0.3 (2026-10-29)
 Linux / Python 3.12: synthetic demo completed.
 Injected +0.13 log-return ranked first and flagged as a check candidate.
-No actual market data or real-market outputs are included.
 Windows/Mac not tested.

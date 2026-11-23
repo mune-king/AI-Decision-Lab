@@ -1,0 +1,4 @@
+results/
+SYNTHETIC_DEMO_NOT_MARKET.csv
+__pycache__/
+*.pyc

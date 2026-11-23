@@ -8,9 +8,12 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import shutil
+import sys
 from analyze_daily import run
+from summary_ja import write_summary
 
-def diagnostics(output):
+def diagnostics(output, banner=''):
     df = pd.read_csv(output/'prices_returns.csv')
     df = df.iloc[1:].copy()
     r = df['log_return'].to_numpy()
@@ -33,37 +36,53 @@ def diagnostics(output):
     ax.scatter(dates[marked],df.loc[marked,'return_percent'],c='red',label='Check candidate: |modified z| > 3.5')
     for i,row in top.iterrows():
         ax.annotate(str(row['timestamp_jst'])[:10],(dates.loc[i],row['return_percent']),fontsize=7,xytext=(3,5),textcoords='offset points')
-    ax.set(xlabel='Source bar timestamp (JST)',ylabel='Log return (%)',title='Large moves for source checking; observations retained')
+    ax.set(xlabel='Source bar timestamp (JST)',ylabel='Log return (%)',title=f'{banner}Large moves for source checking; observations retained')
     ax.legend(fontsize=8); ax.grid(alpha=.2); fig.tight_layout()
     fig.savefig(output/'return_diagnostics.png',dpi=150);plt.close(fig)
     (output/'diagnostics_method.json').write_text(json.dumps({'median':median,'MAD':mad,'modified_z':'0.67448975*(return-median)/MAD','threshold':3.5,'MAD_zero':'scores unavailable; top5 remains usable','interpretation':'Exploratory check candidates, not errors. No observations deleted.'},indent=2))
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('csv',nargs='?',help='Daily CSV with datetime or time, and close')
-    parser.add_argument('--demo',action='store_true',help='Generate and analyze clearly labeled synthetic input')
-    parser.add_argument('--drop-last',action='store_true')
+    parser = argparse.ArgumentParser(description='日足CSVのR/S・DFA1解析（学生用）')
+    parser.add_argument('csv',nargs='?',help='日足CSV（列：datetime,close または time,close）')
+    parser.add_argument('--demo',action='store_true',help='合成データで起動練習をする（市場データではない）')
+    parser.add_argument('--drop-last',action='store_true',help='最終行が未確定と確認できた場合だけ付ける')
+    parser.add_argument('--info',help='記入済みの INPUT_INFO_TEMPLATE.txt のコピー')
     args = parser.parse_args()
     if bool(args.csv) == bool(args.demo):
-        parser.error('Choose your CSV OR --demo.')
+        parser.error('CSVファイル名か --demo のどちらか一方を指定してください。')
     base = Path(__file__).resolve().parent
+    if args.info and not Path(args.info).is_file():
+        parser.exit(2, f'エラー：入力情報ファイルが見つかりません：{args.info}\n'
+                       '  直し方：INPUT_INFO_TEMPLATE.txt をコピーして記入し、そのファイル名を --info に指定してください。\n')
     if args.demo:
         sample = base/'SYNTHETIC_DEMO_NOT_MARKET.csv'
         rng = np.random.default_rng(20261029)
         returns = rng.normal(0,.01,219)
         returns[100] = .13
         prices = 100*np.exp(np.r_[0,np.cumsum(returns)])
-        dates = pd.bdate_range('2026-01-02',periods=220,tz='Asia/Tokyo')+pd.Timedelta(hours=15,minutes=30)
+        # Same timestamps as v0.3; built without Timedelta addition, which warns under pandas 2.x.
+        dates = pd.bdate_range('2026-01-02 15:30',periods=220,tz='Asia/Tokyo',normalize=False)
         pd.DataFrame({'datetime':dates.astype(str),'close':prices}).to_csv(sample,index=False)
         source = sample
         print('SYNTHETIC DEMO ONLY: generated numbers, not market observations.')
+        print('合成デモ：乱数で作った数値です。市場の観測結果ではありません。')
     else:
         source = Path(args.csv).resolve()
+    banner = 'SYNTHETIC DEMO - NOT MARKET DATA | ' if args.demo else ''
     output = base/'results'/datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-    run(source,output,drop_last=args.drop_last)
-    diagnostics(output)
+    try:
+        run(source,output,drop_last=args.drop_last,banner=banner)
+    except ValueError as exc:
+        sys.exit(f'\n入力エラー：{exc}\n'
+                 '結果は保存していません。直せない場合は、このメッセージ全文と試した操作を報告してください。')
+    diagnostics(output, banner)
+    if args.info:
+        shutil.copyfile(args.info, output/'INPUT_INFO.txt')
+    write_summary(output, base, info_path=args.info, demo=args.demo)
     print('Saved results:',output)
-    print('Read results.csv, scaling.png, return_diagnostics.png and largest_moves_top5.csv.')
+    print('結果の保存先：',output)
+    print('まず RESULT_SUMMARY_JA.txt を開き、results.csv・scaling.png・return_diagnostics.png・'
+          'largest_moves_top5.csv で数値を確かめてください。')
 
 if __name__ == '__main__':
     main()

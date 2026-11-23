@@ -13,33 +13,89 @@ import numpy as np
 import pandas as pd
 
 
+class InputError(ValueError):
+    """Input problem with a Japanese explanation of cause and fix."""
+
+
+def _fail(problem, fix):
+    raise InputError(f'{problem}\n  直し方：{fix}')
+
+
+def _rows(index, limit=5):
+    """CSV line numbers (header = line 1) for the first offending rows."""
+    lines = [str(int(i)+2) for i in list(index)[:limit]]
+    more = '' if len(index) <= limit else f' ほか{len(index)-limit}か所'
+    return '、'.join(lines) + more
+
+
 def load_daily(path, drop_last=False):
-    raw = pd.read_csv(path)
+    path = Path(path)
+    if not path.is_file():
+        _fail(f'入力ファイルが見つかりません：{path}',
+              'ファイル名と保存場所を確認してください。スペースを含む名前は "" で囲みます。')
+    try:
+        raw = pd.read_csv(path)
+    except pd.errors.EmptyDataError:
+        _fail(f'入力ファイルが空です：{path.name}', '日足CSVを保存し直してください。')
+    except UnicodeDecodeError:
+        _fail(f'文字コードを読めません：{path.name}', 'CSVを「CSV UTF-8」形式で保存し直してください。')
+    except pd.errors.ParserError as exc:
+        _fail(f'CSVとして読めません（列数が行ごとに違う可能性）：{exc}',
+              '区切りがカンマ1種類か、説明行や合計行が混ざっていないか確認してください。')
+    raw.columns = [str(c).lstrip('\ufeff') for c in raw.columns]
     if 'close' not in raw or not ({'time', 'datetime'} & set(raw)):
-        raise ValueError('CSV requires close and time (Unix seconds) or datetime (ISO8601).')
+        _fail(f'必要な列がありません。見つかった列：{list(raw.columns)}',
+              '1行目の列名を datetime,close（ISO8601の日時）または time,close（Unix秒）にしてください。'
+              '大文字・空白も区別します（Close や " close" は不可）。')
+    if len(raw) < 20:
+        _fail(f'行数が{len(raw)}行しかありません（最低20行）。',
+              '取得期間が予定どおりか、取得漏れ・欠測・入力形式の問題がないかを確認してください。'
+              '解消できなければ、期間・本数とこのエラー全文を報告してください。')
     field = 'time' if 'time' in raw else 'datetime'
     if field == 'time' and pd.api.types.is_numeric_dtype(raw[field]):
         times = pd.DatetimeIndex(pd.to_datetime(raw[field], unit='s', utc=True)).tz_convert('Asia/Tokyo')
     else:
-        stamps = [pd.Timestamp(s) for s in raw[field]]
+        stamps = []
+        for i, s in enumerate(raw[field]):
+            try:
+                stamps.append(pd.Timestamp(s))
+            except (ValueError, TypeError):
+                _fail(f'{field}列を日時として読めません（{i+2}行目：{s!r}）。',
+                      '2026-01-05T15:30:00+09:00 のようなISO8601形式か、Unix秒の time 列にしてください。'
+                      '提供元の日時を保ち、時刻を作って埋めないでください。')
         if len({s.tzinfo is not None for s in stamps}) != 1:
-            raise ValueError('Mixed naive and aware timestamps are forbidden.')
+            _fail('タイムゾーン付きの日時と無しの日時が混在しています。',
+                  '提供元の仕様を確認し、全行を同じ表記にしてください（推測で+09:00を付けない）。')
         times = (pd.DatetimeIndex(pd.to_datetime(raw[field], utc=True, format='ISO8601')).tz_convert('Asia/Tokyo')
                  if stamps and stamps[0].tzinfo is not None else pd.DatetimeIndex(stamps).tz_localize('Asia/Tokyo'))
-    if len(raw) < 20 or times.hasnans or times.has_duplicates or not times.is_monotonic_increasing:
-        raise ValueError('Need >=20 rows, valid, unique and increasing timestamps.')
+    if times.hasnans:
+        _fail(f'日時が空欄の行があります（{_rows(np.flatnonzero(times.isna()))}行目）。',
+              '元CSVで該当行を確認してください。日時を推測で埋めないでください。')
+    if times.has_duplicates:
+        _fail(f'同じ日時の行が重複しています（{_rows(np.flatnonzero(times.duplicated()))}行目）。',
+              '重複行を元データと照合し、同じ足が二重に保存されていれば一方を外して記録してください。')
+    if not times.is_monotonic_increasing:
+        bad = np.flatnonzero(np.diff(times.asi8) < 0) + 1
+        _fail(f'日時が古い順に並んでいません（{_rows(bad)}行目で逆行）。',
+              '解析用コピーを日時の昇順に並べ替えてください（元CSVは保存したまま）。')
     close = pd.to_numeric(raw['close'], errors='coerce').to_numpy(float)
-    if not np.isfinite(close).all() or (close <= 0).any():
-        raise ValueError('Close must be finite and positive; no automatic repair or interpolation.')
+    if not np.isfinite(close).all():
+        _fail(f'close列に数値でない値・空欄があります（{_rows(np.flatnonzero(~np.isfinite(close)))}行目）。',
+              '桁区切りのカンマ（1,234）や文字を除き、空欄は元データで確認してください。自動補間はしません。')
+    if (close <= 0).any():
+        _fail(f'close列に0以下の価格があります（{_rows(np.flatnonzero(close <= 0))}行目）。',
+              '取得ミスの可能性があります。元データと照合してください。対数収益率は正の価格でのみ計算できます。')
     if times.normalize().has_duplicates:
-        raise ValueError('Multiple bars on the same JST timestamp date; input may not be daily.')
+        _fail(f'同じ日付（日本時間）に複数の行があります（{_rows(np.flatnonzero(times.normalize().duplicated()))}行目）。',
+              '日足ではなく4時間足などの可能性があります。現版は日足専用です。日足を取得し直してください。')
     ohlc_bad = None
     if {'open', 'high', 'low'} <= set(raw):
         ohlc = raw[['open', 'high', 'low', 'close']].apply(pd.to_numeric, errors='coerce')
         ohlc_bad = int((~np.isfinite(ohlc).all(axis=1) | (ohlc['low'] > ohlc[['open', 'close']].min(axis=1))
                         | (ohlc['high'] < ohlc[['open', 'close']].max(axis=1)) | (ohlc['low'] > ohlc['high'])).sum())
         if ohlc_bad:
-            raise ValueError('Invalid OHLC rows; check source before analysis.')
+            _fail(f'open/high/low/close の関係が矛盾する行が{ohlc_bad}行あります。',
+                  '高値<安値などがないか元データで確認してください。不要なら open,high,low 列を外せます。')
     inventory = {'input_filename': Path(path).name,
                  'input_sha256': hashlib.sha256(Path(path).read_bytes()).hexdigest(),
                  'instrument': 'User-declared daily input; instrument identity is not validated by this script',
@@ -87,10 +143,33 @@ def fluctuations(x, scales):
     return pd.DataFrame(rows)
 
 
+SHORTAGE_GUIDE = (
+    '  直し方（まず確認すること）：\n'
+    '   1. 取得期間が予定どおりか（2026年1月から最新確定日まで取れているか）。\n'
+    '   2. 取得漏れ・欠測・入力形式の問題（途中で切れた保存、ページ分割された取得、別の足の混入など）がないか。\n'
+    '   3. 期間を見直して、必要な観測点数を確保できるか。\n'
+    '  不足を解消できなければ、上の期間・本数とこのエラー全文を報告してください。\n'
+    '  計算を通すためだけに尺度（--min-scale / --max-scale）を変えないでください。\n'
+    '  解析条件を変える必要があると考える場合は、変更せずにその理由と影響を報告して相談してください。')
+
+
+class DataShortage(ValueError):
+    """Too few observations for the scale analysis."""
+
+
+def _shortage(audit, n, detail):
+    return InputError(
+        f'データが不足しているため解析できません：{detail}\n'
+        f'  入力期間（JST）：{audit["analysis_first_timestamp_jst"]} ～ {audit["analysis_last_timestamp_jst"]}、'
+        f'価格{audit["price_rows_used"]}本・収益率{n}点'
+        f'（元ファイル{audit["source_rows"]}行、--drop-last {"あり" if audit["drop_last"] else "なし"}）\n'
+        + SHORTAGE_GUIDE)
+
+
 def fit(table, column, count):
     usable = (table[column] > 0) & np.isfinite(table[column]) & (table[count] >= 4)
     if usable.sum() < 4:
-        raise ValueError('Need >=4 scales, each with >=4 nonoverlapping windows.')
+        raise DataShortage('有効な尺度が4つ未満です（各尺度で重ならない窓が4個以上必要）。')
     xx = np.log(table.loc[usable, 'scale_observations'].to_numpy())
     yy = np.log(table.loc[usable, column].to_numpy())
     slope, intercept = np.polyfit(xx, yy, 1)
@@ -99,22 +178,31 @@ def fit(table, column, count):
     return float(slope), float(intercept), r2, usable
 
 
-def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
+def run(csv, out, drop_last=False, min_scale=16, max_scale=None, banner=''):
     out = Path(out)
     if out.exists() and any(out.iterdir()):
-        raise ValueError('Output directory must be empty. Choose a new --out directory.')
+        raise InputError('出力先フォルダが空ではありません。\n  直し方：新しい --out フォルダを指定してください。')
     frame, audit = load_daily(csv, drop_last)
     x = frame['log_return'].iloc[1:].to_numpy()
     max_scale = len(x)//4 if max_scale is None else max_scale
     if not 4 <= min_scale < max_scale <= len(x)//4:
-        raise ValueError('Require 4 <= min-scale < max-scale <= number of returns // 4.')
+        if len(x)//4 <= min_scale:
+            raise _shortage(audit, len(x), f'最小尺度{min_scale}点で各尺度に窓4個以上を取るには、'
+                                           f'収益率が{4*(min_scale+1)}点以上必要です（現在{len(x)}点）。')
+        raise InputError(f'指定した尺度範囲が使えません：min={min_scale}, max={max_scale}'
+                         f'（4 <= min < max <= 収益率{len(x)}点 // 4 = {len(x)//4} が必要）。\n'
+                         '  直し方：通常は --min-scale / --max-scale を指定せず既定値で実行してください。'
+                         '条件を変える場合は、理由と影響を記録して報告してください。')
     scales = np.unique(np.round(np.geomspace(min_scale, max_scale, 12)).astype(int))
     table = fluctuations(x, scales)
     results = []
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
     for ax, method, column, count, name in zip(axes, ['R/S', 'DFA1'], ['rs_mean', 'dfa_F'],
                                             ['rs_windows', 'dfa_windows'], ['H_RS', 'alpha_DFA1']):
-        exponent, intercept, r2, usable = fit(table, column, count)
+        try:
+            exponent, intercept, r2, usable = fit(table, column, count)
+        except DataShortage as exc:
+            raise _shortage(audit, len(x), str(exc)) from None
         selected = table.loc[usable, 'scale_observations']
         results.append({'method': method, 'exponent_name': name, 'exponent': exponent, 'loglog_R2': r2,
                         'min_scale': int(selected.min()), 'max_scale': int(selected.max()),
@@ -125,7 +213,7 @@ def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
                   label=f'{name} = {exponent:.4f}\nR-squared = {r2:.4f}')
         ax.set(title=method, xlabel='Scale (daily return observations)', ylabel='Mean R/S' if method == 'R/S' else 'F(s)')
         ax.legend(); ax.grid(alpha=.2, which='both')
-    fig.suptitle(f'DAILY log returns (input instrument declared by user) | N = {len(x)}\n'
+    fig.suptitle(f'{banner}DAILY log returns (input instrument declared by user) | N = {len(x)}\n'
                  f'Forward nonoverlapping windows; source last row {"excluded" if drop_last else "included"}', fontsize=11)
     fig.tight_layout()
     out.mkdir(parents=True, exist_ok=True)
@@ -137,7 +225,7 @@ def run(csv, out, drop_last=False, min_scale=16, max_scale=None):
     axes[1].plot(times.iloc[1:], 100*x, color='#dc6a3b', linewidth=.7)
     axes[1].set(ylabel='Log return (%)', xlabel='Source bar timestamp date (JST); trading-date mapping unverified')
     for ax in axes: ax.grid(alpha=.2)
-    fig.suptitle(f'DAILY INPUT | {len(frame)} price bars / {len(x)} log returns', fontsize=12)
+    fig.suptitle(f'{banner}DAILY INPUT | {len(frame)} price bars / {len(x)} log returns', fontsize=12)
     fig.tight_layout(); fig.savefig(out/'prices_returns.png', dpi=170); plt.close(fig)
     frame.to_csv(out/'prices_returns.csv', index=False)
     table.to_csv(out/'scales.csv', index=False)
@@ -172,7 +260,7 @@ def main():
     try:
         run(args.csv, args.out, args.drop_last, args.min_scale, args.max_scale)
     except (ValueError, KeyError, TypeError) as exc:
-        parser.exit(2, f'ERROR: {exc}\n')
+        parser.exit(2, f'エラー：{exc}\n')
 
 
 if __name__ == '__main__':
